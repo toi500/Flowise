@@ -63,6 +63,22 @@ class Deepseek_ChatModels implements INode {
                 additionalParams: true
             },
             {
+                label: 'Override Base URL',
+                name: 'overrideBaseURL',
+                type: 'string',
+                optional: true,
+                description: 'Override the base URL for API calls',
+                additionalParams: true
+            },
+            {
+                label: 'Override Model Name',
+                name: 'overrideModelName',
+                type: 'string',
+                optional: true,
+                description: 'Override the model name to use for API calls',
+                additionalParams: true
+            },
+            {
                 label: 'Max Tokens',
                 name: 'maxTokens',
                 type: 'number',
@@ -132,6 +148,8 @@ class Deepseek_ChatModels implements INode {
     async init(nodeData: INodeData, _: string, options: ICommonObject): Promise<any> {
         const temperature = nodeData.inputs?.temperature as string
         const modelName = nodeData.inputs?.modelName as string
+        const overrideModelName = nodeData.inputs?.overrideModelName as string
+        const overrideBaseURL = nodeData.inputs?.overrideBaseURL as string
         const maxTokens = nodeData.inputs?.maxTokens as string
         const topP = nodeData.inputs?.topP as string
         const frequencyPenalty = nodeData.inputs?.frequencyPenalty as string
@@ -151,7 +169,7 @@ class Deepseek_ChatModels implements INode {
 
         const obj: ChatOpenAIFields = {
             temperature: parseFloat(temperature),
-            modelName,
+            modelName: overrideModelName || modelName,
             openAIApiKey,
             streaming: streaming ?? true
         }
@@ -184,7 +202,8 @@ class Deepseek_ChatModels implements INode {
         const model = new ChatOpenAI({
             ...obj,
             configuration: {
-                baseURL: this.baseURL,
+                baseURL: overrideBaseURL || this.baseURL,
+                defaultQuery: { api_key: openAIApiKey },
                 ...parsedBaseOptions
             }
         })
