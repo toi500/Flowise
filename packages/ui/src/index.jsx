@@ -14,6 +14,7 @@ import ConfirmContextProvider from '@/store/context/ConfirmContextProvider'
 import { ReactFlowContext } from '@/store/context/ReactFlowContext'
 import { ConfigProvider } from '@/store/context/ConfigContext'
 import { ErrorProvider } from '@/store/context/ErrorContext'
+import * as serviceWorker from './serviceWorker'
 
 const container = document.getElementById('root')
 const root = createRoot(container)
@@ -37,3 +38,6 @@ root.render(
         </Provider>
     </React.StrictMode>
 )
+
+// Register the service worker for PWA support
+serviceWorker.register()
