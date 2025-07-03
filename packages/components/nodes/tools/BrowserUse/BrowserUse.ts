@@ -36,6 +36,18 @@ class BrowserUseTool extends Tool {
         this.pollingTimeoutMs = options.pollingTimeoutMs || 180000
     }
 
+    private async getFileDownloadUrl(taskId: string, fileName: string): Promise<string> {
+        try {
+            const response = await axios.get(`https://api.browser-use.com/api/v1/task/${taskId}/output-file/${fileName}`, {
+                headers: { Authorization: `Bearer ${this.apiKey}` }
+            })
+            return response.data.download_url
+        } catch (error: any) {
+            console.error(`Error getting download URL for file ${fileName}:`, error)
+            throw error
+        }
+    }
+
     async _call(input: any): Promise<string> {
         let task: string
         let dynamicSessionOptions: any | undefined
@@ -108,9 +120,15 @@ class BrowserUseTool extends Tool {
                         finalResult += outputText
                     }
                     if (outputFiles && Array.isArray(outputFiles) && outputFiles.length > 0) {
-                        finalResult += `\n\nThe agent also generated the following file(s): ${outputFiles.join(
-                            ', '
-                        )}. Please check the Browser-Use dashboard to download them.`
+                        finalResult += '\n\nThe agent generated the following files:'
+                        for (const fileName of outputFiles) {
+                            try {
+                                const downloadUrl = await this.getFileDownloadUrl(taskId, fileName)
+                                finalResult += `\n- ${fileName}: ${downloadUrl}`
+                            } catch (error) {
+                                finalResult += `\n- ${fileName}: (Error getting download URL)`
+                            }
+                        }
                     }
                     return finalResult.trim() || 'Task finished successfully but returned no specific text output or files.'
                 }
