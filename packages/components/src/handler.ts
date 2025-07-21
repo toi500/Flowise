@@ -206,7 +206,10 @@ export class ConsoleCallbackHandler extends BaseTracer {
         this.logger = logger
         this.orgId = orgId
         if (getEnvironmentVariable('DEBUG') === 'true') {
-            logger.level = getEnvironmentVariable('LOG_LEVEL') ?? 'info'
+            const logLevel = getEnvironmentVariable('LOG_LEVEL') ?? 'info'
+            if (logLevel.toLowerCase() !== 'none') {
+                logger.level = logLevel
+            }
         }
     }
 
