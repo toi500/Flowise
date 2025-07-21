@@ -102,21 +102,28 @@ if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir)
 }
 
-const logger = createLogger({
-    format: combine(
-        timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-        format.json(),
-        printf(({ level, message, timestamp, stack }) => {
-            const text = `${timestamp} [${level.toUpperCase()}]: ${message}`
-            return stack ? text + '\n' + stack : text
-        }),
-        errors({ stack: true })
-    ),
-    defaultMeta: {
-        package: 'server'
-    },
-    exitOnError: false,
-    transports: [
+import TransportStream = require('winston-transport')
+
+// Null transport to discard logs and suppress Winston warnings
+class NullTransport extends TransportStream {
+    log(info: any, callback: () => void) {
+        setImmediate(callback)
+    }
+}
+let loggerTransports: TransportStream[] = []
+let loggerExceptionHandlers: TransportStream[] = []
+let loggerRejectionHandlers: TransportStream[] = []
+
+const logLevel = (process.env.LOG_LEVEL || '').toLowerCase()
+if (logLevel === 'none') {
+    loggerTransports = [new NullTransport()]
+    loggerExceptionHandlers = [new NullTransport()]
+    loggerRejectionHandlers = [new NullTransport()]
+    // Print disclaimer to stdout when running in logless mode
+    // This will not be logged by Winston, but will be visible in the process output
+    console.warn('[Flowise] LOG_LEVEL=none: Flowise is running in logless mode. No logs will be recorded.')
+} else {
+    loggerTransports = [
         new transports.Console(),
         ...(!process.env.STORAGE_TYPE || process.env.STORAGE_TYPE === 'local'
             ? [
@@ -136,8 +143,8 @@ const logger = createLogger({
               ]
             : []),
         ...(process.env.STORAGE_TYPE === 'gcs' ? [gcsServerStream] : [])
-    ],
-    exceptionHandlers: [
+    ]
+    loggerExceptionHandlers = [
         ...(process.env.DEBUG && process.env.DEBUG === 'true' ? [new transports.Console()] : []),
         ...(process.env.STORAGE_TYPE === 's3'
             ? [
@@ -147,8 +154,8 @@ const logger = createLogger({
               ]
             : []),
         ...(process.env.STORAGE_TYPE === 'gcs' ? [gcsErrorStream] : [])
-    ],
-    rejectionHandlers: [
+    ]
+    loggerRejectionHandlers = [
         ...(process.env.DEBUG && process.env.DEBUG === 'true' ? [new transports.Console()] : []),
         ...(process.env.STORAGE_TYPE === 's3'
             ? [
@@ -163,10 +170,35 @@ const logger = createLogger({
             ? [new transports.Console()]
             : [])
     ]
+}
+
+const logger = createLogger({
+    format: combine(
+        timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        format.json(),
+        printf(({ level, message, timestamp, stack }) => {
+            const text = `${timestamp} [${level.toUpperCase()}]: ${message}`
+            return stack ? text + '\n' + stack : text
+        }),
+        errors({ stack: true })
+    ),
+    defaultMeta: {
+        package: 'server'
+    },
+    exitOnError: false,
+    transports: loggerTransports,
+    exceptionHandlers: loggerExceptionHandlers,
+    rejectionHandlers: loggerRejectionHandlers
 })
 
 export function expressRequestLogger(req: Request, res: Response, next: NextFunction): void {
     const unwantedLogURLs = ['/api/v1/node-icon/', '/api/v1/components-credentials-icon/', '/api/v1/ping']
+    const logLevel = (process.env.LOG_LEVEL || '').toLowerCase()
+
+    if (logLevel === 'none') {
+        next()
+        return
+    }
 
     if (/\/api\/v1\//i.test(req.url) && !unwantedLogURLs.some((url) => new RegExp(url, 'i').test(req.url))) {
         // Create a sanitized copy of the request body
