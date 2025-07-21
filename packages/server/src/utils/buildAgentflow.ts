@@ -156,6 +156,21 @@ const addExecution = async (
     sessionId: string,
     workspaceId: string
 ) => {
+    // Skip execution recording if DISABLE_EXECUTION_RECORDING is true
+    if (process.env.DISABLE_EXECUTION_RECORDING === 'true') {
+        // Return a mock execution object with minimal required properties
+        return {
+            id: `mock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            state: 'INPROGRESS',
+            agentflowId,
+            sessionId,
+            workspaceId,
+            executionData: JSON.stringify(agentFlowExecutedData),
+            createdDate: new Date(),
+            updatedDate: new Date()
+        } as Execution
+    }
+
     const newExecution = new Execution()
     const bodyExecution = {
         agentflowId,
@@ -178,6 +193,11 @@ const addExecution = async (
  * @returns {Promise<void>}
  */
 const updateExecution = async (appDataSource: DataSource, executionId: string, workspaceId: string, data?: Partial<IExecution>) => {
+    // Skip execution recording if DISABLE_EXECUTION_RECORDING is true
+    if (process.env.DISABLE_EXECUTION_RECORDING === 'true') {
+        return
+    }
+
     const execution = await appDataSource.getRepository(Execution).findOneBy({
         id: executionId,
         workspaceId
