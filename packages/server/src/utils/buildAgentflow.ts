@@ -1311,8 +1311,18 @@ export const executeAgentFlow = async ({
     const uploads = incomingInput.uploads
     const userMessageDateTime = new Date()
     const chatflowid = chatflow.id
-    const sessionId = incomingInput.sessionId ?? chatId
     const humanInput: IHumanInput | undefined = incomingInput.humanInput
+    const sessionId = incomingInput.sessionId ?? incomingInput.overrideConfig?.sessionId ?? chatId
+
+    // Handle /clear command to delete chat history
+    if (question?.trim() === '/clear') {
+        try {
+            await appDataSource.getRepository(ChatMessage).delete({ chatflowid, sessionId })
+            return { text: '', chatId, sessionId, question: '/clear', chatflowid, agentFlowExecutedData: [] }
+        } catch (error) {
+            return { text: '', chatId, sessionId, question: '/clear', chatflowid, agentFlowExecutedData: [] }
+        }
+    }
 
     // Validate history schema if provided
     if (incomingInput.history && incomingInput.history.length > 0) {
