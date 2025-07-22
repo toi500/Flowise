@@ -265,6 +265,17 @@ export const executeFlow = async ({
     const streaming = incomingInput.streaming ?? false
     const userMessageDateTime = new Date()
     const chatflowid = chatflow.id
+    let sessionId = incomingInput.sessionId ?? incomingInput.overrideConfig?.sessionId ?? chatId
+
+    // Handle /clear command to delete chat history
+    if (question.trim() === '/clear') {
+        try {
+            await appDataSource.getRepository(ChatMessage).delete({ chatflowid, sessionId })
+            return { text: '', chatId, sessionId, question: '/clear', chatflowid }
+        } catch (error) {
+            return { text: '', chatId, sessionId, question: '/clear', chatflowid }
+        }
+    }
 
     /* Process file uploads from the chat
      * - Images
@@ -436,7 +447,7 @@ export const executeFlow = async ({
     /*** Get session ID ***/
     const memoryNode = findMemoryNode(nodes, edges)
     const memoryType = memoryNode?.data.label || ''
-    let sessionId = getMemorySessionId(memoryNode, incomingInput, chatId, isInternal)
+    sessionId = getMemorySessionId(memoryNode, incomingInput, chatId, isInternal)
 
     /*** Get Ending Node with Directed Graph  ***/
     const { graph, nodeDependencies } = constructGraphs(nodes, edges)
