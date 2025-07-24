@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm'
 import { v4 as uuidv4 } from 'uuid'
 import { cloneDeep, get } from 'lodash'
+import { setMaxListeners } from 'events'
 import TurndownService from 'turndown'
 import {
     AnalyticHandler,
@@ -82,7 +83,6 @@ interface IProcessNodeOutputsParams {
     edges: IReactFlowEdge[]
     nodeExecutionQueue: INodeQueue[]
     waitingNodes: Map<string, IWaitingNode>
-    loopCounts: Map<string, number>
     abortController?: AbortController
 }
 
@@ -604,12 +604,27 @@ async function processNodeOutputs({
     nodes,
     edges,
     nodeExecutionQueue,
-    waitingNodes,
-    loopCounts
+    waitingNodes
 }: IProcessNodeOutputsParams): Promise<{ humanInput?: IHumanInput }> {
     logger.debug(`\n🔄 Processing outputs from node: ${nodeId}`)
 
     let updatedHumanInput = humanInput
+
+    // Handle looping
+    if (nodeName === 'loopAgentflow' && result.output?.nodeID) {
+        nodeExecutionQueue.push({
+            nodeId: result.output.nodeID,
+            data: result.output,
+            inputs: {}
+        })
+
+        // Clear humanInput when looping to prevent it from being reused
+        if (updatedHumanInput) {
+            updatedHumanInput = undefined
+        }
+        // Return here to prevent processing of child nodes when looping
+        return { humanInput: updatedHumanInput }
+    }
 
     const childNodeIds = graph[nodeId] || []
     logger.debug(`  👉 Child nodes: [${childNodeIds.join(', ')}]`)
@@ -661,31 +676,6 @@ async function processNodeOutputs({
                     logger.debug(`        ${groupId}: [${sources.join(', ')}]`)
                 })
             }
-        }
-    }
-
-    if (nodeName === 'loopAgentflow' && result.output?.nodeID) {
-        logger.debug(`  🔄 Looping back to node: ${result.output.nodeID}`)
-
-        const loopCount = (loopCounts.get(nodeId) || 0) + 1
-        const maxLoop = result.output.maxLoopCount || MAX_LOOP_COUNT
-
-        if (loopCount < maxLoop) {
-            logger.debug(`    Loop count: ${loopCount}/${maxLoop}`)
-            loopCounts.set(nodeId, loopCount)
-            nodeExecutionQueue.push({
-                nodeId: result.output.nodeID,
-                data: result.output,
-                inputs: {}
-            })
-
-            // Clear humanInput when looping to prevent it from being reused
-            if (updatedHumanInput) {
-                logger.debug(`    🧹 Clearing humanInput for loop iteration`)
-                updatedHumanInput = undefined
-            }
-        } else {
-            logger.debug(`    ⚠️ Maximum loop count (${maxLoop}) reached, stopping loop`)
         }
     }
 
@@ -1285,6 +1275,11 @@ export const executeAgentFlow = async ({
 }: IExecuteAgentFlowParams) => {
     logger.debug('\n🚀 Starting flow execution')
 
+    // Increase max listeners for abort signal to prevent memory leak warnings
+    if (abortController?.signal) {
+        setMaxListeners(50, abortController.signal)
+    }
+
     const question = incomingInput.question
     const form = incomingInput.form
     let overrideConfig = incomingInput.overrideConfig ?? {}
@@ -1353,7 +1348,6 @@ export const executeAgentFlow = async ({
     // Initialize execution queue
     const nodeExecutionQueue: INodeQueue[] = []
     const waitingNodes: Map<string, IWaitingNode> = new Map()
-    const loopCounts: Map<string, number> = new Map()
 
     // Initialize runtime state for new execution
     let agentflowRuntime: IAgentFlowRuntime = {
@@ -1757,7 +1751,6 @@ export const executeAgentFlow = async ({
                 edges,
                 nodeExecutionQueue,
                 waitingNodes,
-                loopCounts,
                 abortController
             })
 
