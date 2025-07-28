@@ -72,54 +72,30 @@ class Loop_Agentflow implements INode {
     async run(nodeData: INodeData, _: string, options: ICommonObject): Promise<any> {
         const loopBackToNode = nodeData.inputs?.loopBackToNode as string
         const _maxLoopCount = nodeData.inputs?.maxLoopCount as string
-        const maxLoopCount = _maxLoopCount ? parseInt(_maxLoopCount) : 5
 
-        const state = (options.agentflowRuntime?.state as ICommonObject) || {}
-        const loopBackToNodeId = loopBackToNode?.split('-')[0] || ''
-        const loopBackToNodeLabel = loopBackToNode?.split('-')[1] || ''
+        const state = options.agentflowRuntime?.state as ICommonObject
 
-        // Create a unique key for this loop node's counter
-        const loopCountKey = `__loopCount_${nodeData.id}`
+        const loopBackToNodeId = loopBackToNode.split('-')[0]
+        const loopBackToNodeLabel = loopBackToNode.split('-')[1]
 
-        // Get current loop count for this specific loop node
-        const currentLoopCount = state[loopCountKey] || 0
-
-        // Check if we've reached the maximum loop count
-        if (currentLoopCount >= maxLoopCount) {
-            // Loop is exhausted - return result WITHOUT nodeID to prevent looping
-            return {
-                id: nodeData.id,
-                name: this.name,
-                output: {
-                    content: `Loop exhausted after ${maxLoopCount} iterations`,
-                    exhausted: true,
-                    loopCount: currentLoopCount
-                },
-                state
-            }
-        } else {
-            // Increment the loop counter for next iteration
-            state[loopCountKey] = currentLoopCount + 1
-
-            // Return normal loop output with nodeID to continue looping
-            const data = {
-                nodeID: loopBackToNodeId,
-                maxLoopCount: maxLoopCount
-            }
-
-            return {
-                id: nodeData.id,
-                name: this.name,
-                input: data,
-                output: {
-                    content: `Loop back to ${loopBackToNodeLabel} (${loopBackToNodeId}) - Iteration ${currentLoopCount + 1}`,
-                    nodeID: loopBackToNodeId,
-                    maxLoopCount: maxLoopCount,
-                    loopCount: currentLoopCount + 1
-                },
-                state
-            }
+        const data = {
+            nodeID: loopBackToNodeId,
+            maxLoopCount: _maxLoopCount ? parseInt(_maxLoopCount) : 5
         }
+
+        const returnOutput = {
+            id: nodeData.id,
+            name: this.name,
+            input: data,
+            output: {
+                content: 'Loop back to ' + `${loopBackToNodeLabel} (${loopBackToNodeId})`,
+                nodeID: loopBackToNodeId,
+                maxLoopCount: _maxLoopCount ? parseInt(_maxLoopCount) : 5
+            },
+            state
+        }
+
+        return returnOutput
     }
 }
 

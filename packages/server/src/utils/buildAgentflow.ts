@@ -83,6 +83,7 @@ interface IProcessNodeOutputsParams {
     edges: IReactFlowEdge[]
     nodeExecutionQueue: INodeQueue[]
     waitingNodes: Map<string, IWaitingNode>
+    loopCounts: Map<string, number>
     abortController?: AbortController
 }
 
@@ -604,26 +605,51 @@ async function processNodeOutputs({
     nodes,
     edges,
     nodeExecutionQueue,
-    waitingNodes
+    waitingNodes,
+    loopCounts
 }: IProcessNodeOutputsParams): Promise<{ humanInput?: IHumanInput }> {
     logger.debug(`\n🔄 Processing outputs from node: ${nodeId}`)
 
     let updatedHumanInput = humanInput
 
-    // Handle looping
+    // Handle looping FIRST, before processing any child nodes
     if (nodeName === 'loopAgentflow' && result.output?.nodeID) {
-        nodeExecutionQueue.push({
-            nodeId: result.output.nodeID,
-            data: result.output,
-            inputs: {}
-        })
+        logger.debug(`  🔄 Looping back to node: ${result.output.nodeID}`)
 
-        // Clear humanInput when looping to prevent it from being reused
-        if (updatedHumanInput) {
-            updatedHumanInput = undefined
+        const loopCount = (loopCounts.get(nodeId) || 0) + 1
+        const maxLoop = result.output.maxLoopCount || MAX_LOOP_COUNT
+
+        if (loopCount < maxLoop) {
+            logger.debug(`    Loop count: ${loopCount}/${maxLoop}`)
+            loopCounts.set(nodeId, loopCount)
+            nodeExecutionQueue.push({
+                nodeId: result.output.nodeID,
+                data: result.output,
+                inputs: {}
+            })
+
+            // Clear humanInput when looping to prevent it from being reused
+            if (updatedHumanInput) {
+                logger.debug(`    🧹 Clearing humanInput for loop iteration`)
+                updatedHumanInput = undefined
+            }
+
+            // Return early to prevent processing child nodes when looping
+            return { humanInput: updatedHumanInput }
+        } else {
+            logger.debug(`    ⚠️ Maximum loop count (${maxLoop}) reached, loop exhausted`)
+            // When exhausted, don't continue looping, but allow processing of child nodes
+            // through the "exhausted" output by modifying the result
+            result.output = {
+                ...result.output,
+                content: `Loop exhausted after ${maxLoop} iterations`,
+                exhausted: true,
+                loopCount: maxLoop
+            }
+            // Remove nodeID to prevent further looping
+            delete result.output.nodeID
+            // Continue to process child nodes with this modified result
         }
-        // Return here to prevent processing of child nodes when looping
-        return { humanInput: updatedHumanInput }
     }
 
     const childNodeIds = graph[nodeId] || []
@@ -1348,6 +1374,7 @@ export const executeAgentFlow = async ({
     // Initialize execution queue
     const nodeExecutionQueue: INodeQueue[] = []
     const waitingNodes: Map<string, IWaitingNode> = new Map()
+    const loopCounts: Map<string, number> = new Map()
 
     // Initialize runtime state for new execution
     let agentflowRuntime: IAgentFlowRuntime = {
@@ -1751,6 +1778,7 @@ export const executeAgentFlow = async ({
                 edges,
                 nodeExecutionQueue,
                 waitingNodes,
+                loopCounts,
                 abortController
             })
 
