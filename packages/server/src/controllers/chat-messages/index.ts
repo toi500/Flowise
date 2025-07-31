@@ -11,6 +11,27 @@ import { StatusCodes } from 'http-status-codes'
 import { utilGetChatMessage } from '../../utils/getChatMessage'
 import { getPageAndLimitParams } from '../../utils/pagination'
 
+// Utility function to redact message content
+const redactContent = (content: string): string => {
+    if (!content || typeof content !== 'string') return content
+
+    // Preserve structure but redact content
+    return content
+        .split(/(\s+)/) // Split on whitespace but preserve it
+        .map((word) => {
+            if (word.trim() === '') return word // Keep whitespace
+            if (word.length <= 2) return '██' // Short words become ██
+            if (word.length <= 4) return '████' // Medium words become ████
+            return '█'.repeat(Math.min(word.length, 8)) // Longer words become ████████ (max 8)
+        })
+        .join('')
+}
+
+// Check if message content redaction is enabled
+const isRedactionEnabled = (): boolean => {
+    return process.env.REDACT_MESSAGE_CONTENT === 'true'
+}
+
 const getFeedbackTypeFilters = (_feedbackTypeFilters: ChatMessageRatingType[]): ChatMessageRatingType[] | undefined => {
     try {
         let feedbackTypeFilters
@@ -322,10 +343,30 @@ const abortChatMessage = async (req: Request, res: Response, next: NextFunction)
 const parseAPIResponse = (apiResponse: ChatMessage | ChatMessage[]): ChatMessage | ChatMessage[] => {
     const parseResponse = (response: ChatMessage): ChatMessage => {
         const parsedResponse = { ...response }
+        const shouldRedact = isRedactionEnabled()
+
+        // Apply redaction to sensitive content if enabled
+        if (shouldRedact) {
+            if (parsedResponse.content) {
+                parsedResponse.content = redactContent(parsedResponse.content)
+            }
+
+            // Redact feedback content if it exists (feedback property added via join)
+            if ((parsedResponse as any).feedback && (parsedResponse as any).feedback.content) {
+                ;(parsedResponse as any).feedback.content = redactContent((parsedResponse as any).feedback.content)
+            }
+        }
 
         try {
             if (parsedResponse.sourceDocuments) {
-                parsedResponse.sourceDocuments = JSON.parse(parsedResponse.sourceDocuments)
+                let sourceDocuments = JSON.parse(parsedResponse.sourceDocuments)
+                if (shouldRedact && Array.isArray(sourceDocuments)) {
+                    sourceDocuments = sourceDocuments.map((doc: any) => ({
+                        ...doc,
+                        pageContent: doc.pageContent ? redactContent(doc.pageContent) : doc.pageContent
+                    }))
+                }
+                parsedResponse.sourceDocuments = sourceDocuments
             }
             if (parsedResponse.usedTools) {
                 parsedResponse.usedTools = JSON.parse(parsedResponse.usedTools)
