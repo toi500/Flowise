@@ -344,14 +344,13 @@ const parseAPIResponse = (apiResponse: ChatMessage | ChatMessage[]): ChatMessage
     const parseResponse = (response: ChatMessage): ChatMessage => {
         const parsedResponse = { ...response }
         const shouldRedact = isRedactionEnabled()
+        // Only redact if not an INTERNAL (UI) message
+        const isUIMessage = parsedResponse.chatType === 'INTERNAL'
 
-        // Apply redaction to sensitive content if enabled
-        if (shouldRedact) {
+        if (shouldRedact && !isUIMessage) {
             if (parsedResponse.content) {
                 parsedResponse.content = redactContent(parsedResponse.content)
             }
-
-            // Redact feedback content if it exists (feedback property added via join)
             if ((parsedResponse as any).feedback && (parsedResponse as any).feedback.content) {
                 ;(parsedResponse as any).feedback.content = redactContent((parsedResponse as any).feedback.content)
             }
@@ -360,7 +359,7 @@ const parseAPIResponse = (apiResponse: ChatMessage | ChatMessage[]): ChatMessage
         try {
             if (parsedResponse.sourceDocuments) {
                 let sourceDocuments = JSON.parse(parsedResponse.sourceDocuments)
-                if (shouldRedact && Array.isArray(sourceDocuments)) {
+                if (shouldRedact && !isUIMessage && Array.isArray(sourceDocuments)) {
                     sourceDocuments = sourceDocuments.map((doc: any) => ({
                         ...doc,
                         pageContent: doc.pageContent ? redactContent(doc.pageContent) : doc.pageContent
