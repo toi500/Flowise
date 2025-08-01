@@ -1318,7 +1318,7 @@ export const executeAgentFlow = async ({
     const userMessageDateTime = new Date()
     const chatflowid = chatflow.id
     const humanInput: IHumanInput | undefined = incomingInput.humanInput
-    const sessionId = incomingInput.sessionId ?? incomingInput.overrideConfig?.sessionId ?? chatId
+    const sessionId = overrideConfig.sessionId || chatId
 
     // Handle /clear command to delete chat history
     if (question?.trim() === '/clear') {

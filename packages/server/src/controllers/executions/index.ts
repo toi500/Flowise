@@ -1,12 +1,21 @@
 import { Request, Response, NextFunction } from 'express'
 import executionsService from '../../services/executions'
 import { ExecutionState } from '../../Interface'
+import { redactObject } from '../../utils/redact'
+
+// Check if execution content redaction is enabled
+const isRedactionEnabled = (): boolean => {
+    return process.env.REDACT_EXECUTION_CONTENT === 'true'
+}
 
 const getExecutionById = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const executionId = req.params.id
         const workspaceId = req.user?.activeWorkspaceId
         const execution = await executionsService.getExecutionById(executionId, workspaceId)
+        if (isRedactionEnabled()) {
+            return res.json(redactObject(execution))
+        }
         return res.json(execution)
     } catch (error) {
         next(error)
@@ -17,6 +26,9 @@ const getPublicExecutionById = async (req: Request, res: Response, next: NextFun
     try {
         const executionId = req.params.id
         const execution = await executionsService.getPublicExecutionById(executionId)
+        if (isRedactionEnabled()) {
+            return res.json(redactObject(execution))
+        }
         return res.json(execution)
     } catch (error) {
         next(error)
@@ -28,6 +40,9 @@ const updateExecution = async (req: Request, res: Response, next: NextFunction) 
         const executionId = req.params.id
         const workspaceId = req.user?.activeWorkspaceId
         const execution = await executionsService.updateExecution(executionId, req.body, workspaceId)
+        if (isRedactionEnabled()) {
+            return res.json(redactObject(execution))
+        }
         return res.json(execution)
     } catch (error) {
         next(error)
@@ -77,6 +92,9 @@ const getAllExecutions = async (req: Request, res: Response, next: NextFunction)
 
         const apiResponse = await executionsService.getAllExecutions(filters)
 
+        if (isRedactionEnabled()) {
+            return res.json(redactObject(apiResponse))
+        }
         return res.json(apiResponse)
     } catch (error) {
         next(error)
@@ -105,6 +123,9 @@ const deleteExecutions = async (req: Request, res: Response, next: NextFunction)
         }
 
         const result = await executionsService.deleteExecutions(executionIds, workspaceId)
+        if (isRedactionEnabled()) {
+            return res.json(redactObject(result))
+        }
         return res.json(result)
     } catch (error) {
         next(error)
