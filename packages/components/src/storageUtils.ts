@@ -547,11 +547,10 @@ export const getStorageType = (): string => {
     return process.env.STORAGE_TYPE ? process.env.STORAGE_TYPE : 'local'
 }
 
-export const removeFilesFromStorage = async (...paths: string[]) => {
+export const removeFilesFromStorage = async (orgId: string, chatflowId: string, chatId: string): Promise<{ totalSize: number }> => {
     const storageType = getStorageType()
     if (storageType === 's3') {
-        let Key = paths.reduce((acc, cur) => acc + '/' + cur, '')
-        // remove the first '/' if it exists
+        let Key = [orgId, chatflowId, chatId].join('/')
         if (Key.startsWith('/')) {
             Key = Key.substring(1)
         }
@@ -559,20 +558,26 @@ export const removeFilesFromStorage = async (...paths: string[]) => {
         await _deleteS3Folder(Key)
 
         // check folder size after deleting all the files
-        const totalSize = await getS3StorageSize(paths[0])
+        const totalSize = await getS3StorageSize(orgId)
         return { totalSize: totalSize / 1024 / 1024 }
     } else if (storageType === 'gcs') {
         const { bucket } = getGcsClient()
-        const normalizedPath = paths.map((p) => p.replace(/\\/g, '/')).join('/')
+        const normalizedPath = [orgId, chatflowId, chatId].join('/').replace(/\\/g, '/')
         await bucket.deleteFiles({ prefix: `${normalizedPath}/` })
 
-        const totalSize = await getGCSStorageSize(paths[0])
+        const totalSize = await getGCSStorageSize(orgId)
         return { totalSize: totalSize / 1024 / 1024 }
     } else {
-        const directory = path.join(getStoragePath(), ...paths.map(_sanitizeFilename))
-        await _deleteLocalFolderRecursive(directory)
+        const storagePath = getStoragePath()
+        const dirPath = path.join(storagePath, chatflowId, chatId)
+        if (!fs.existsSync(dirPath)) {
+            // Directory does not exist, nothing to delete
+            return { totalSize: 0 }
+        }
 
-        const totalSize = await dirSize(path.join(getStoragePath(), paths[0]))
+        await _deleteLocalFolderRecursive(dirPath)
+
+        const totalSize = await dirSize(path.join(getStoragePath(), orgId))
 
         return { totalSize: totalSize / 1024 / 1024 }
     }
