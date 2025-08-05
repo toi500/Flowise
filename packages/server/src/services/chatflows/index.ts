@@ -1,6 +1,6 @@
 import { ICommonObject, removeFolderFromStorage } from 'flowise-components'
 import { StatusCodes } from 'http-status-codes'
-import { In } from 'typeorm'
+import { In, QueryRunner } from 'typeorm'
 import { ChatflowType, IReactFlowObject } from '../../Interface'
 import { FLOWISE_COUNTER_STATUS, FLOWISE_METRIC_COUNTERS } from '../../Interface.Metrics'
 import { UsageCacheManager } from '../../UsageCacheManager'
@@ -18,7 +18,8 @@ import { containsBase64File, updateFlowDataWithFilePaths } from '../../utils/fil
 import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
 import { utilGetUploadsConfig } from '../../utils/getUploadsConfig'
 import logger from '../../utils/logger'
-import { updateStorageUsage } from '../../utils/quotaUsage'
+import { checkUsageLimit, updateStorageUsage } from '../../utils/quotaUsage'
+import historyService from '../history'
 
 // Check if chatflow valid for streaming
 const checkIfChatflowIsValidForStreaming = async (chatflowId: string): Promise<any> => {
@@ -298,11 +299,85 @@ const saveChatflow = async (
             { status: FLOWISE_COUNTER_STATUS.SUCCESS }
         )
 
+        // Create initial history snapshot
+        const snapshot = await historyService.createSnapshot({
+            entityType: 'CHATFLOW',
+            entityId: dbResponse.id,
+            entityData: dbResponse,
+            changeDescription: 'Initial creation',
+            workspaceId: dbResponse.workspaceId
+        })
+        if (snapshot) {
+            // Re-fetch the chatflow to get the updated currentHistoryVersion
+            const updatedChatflow = await appServer.AppDataSource.getRepository(ChatFlow).findOne({
+                where: { id: dbResponse.id }
+            })
+            return updatedChatflow || dbResponse
+        }
+
         return dbResponse
     } catch (error) {
         throw new InternalFlowiseError(
             StatusCodes.INTERNAL_SERVER_ERROR,
             `Error: chatflowsService.saveChatflow - ${getErrorMessage(error)}`
+        )
+    }
+}
+
+const importChatflows = async (
+    newChatflows: Partial<ChatFlow>[],
+    orgId: string,
+    _: string,
+    subscriptionId: string,
+    queryRunner?: QueryRunner
+): Promise<any> => {
+    try {
+        const appServer = getRunningExpressApp()
+        const repository = queryRunner ? queryRunner.manager.getRepository(ChatFlow) : appServer.AppDataSource.getRepository(ChatFlow)
+
+        // step 1 - check whether file chatflows array is zero
+        if (newChatflows.length == 0) return
+
+        await checkUsageLimit('flows', subscriptionId, appServer.usageCacheManager, newChatflows.length)
+
+        // step 2 - check whether ids are duplicate in database
+        let ids = '('
+        let count: number = 0
+        const lastCount = newChatflows.length - 1
+        newChatflows.forEach((newChatflow) => {
+            ids += `'${newChatflow.id}'`
+            if (lastCount != count) ids += ','
+            if (lastCount == count) ids += ')'
+            count += 1
+        })
+
+        const selectResponse = await repository.createQueryBuilder('cf').select('cf.id').where(`cf.id IN ${ids}`).getMany()
+        const foundIds = selectResponse.map((response) => {
+            return response.id
+        })
+
+        // step 3 - remove ids that are only duplicate
+        const prepChatflows: Partial<ChatFlow>[] = newChatflows.map((newChatflow) => {
+            let id: string = ''
+            if (newChatflow.id) id = newChatflow.id
+            let flowData: string = ''
+            if (newChatflow.flowData) flowData = newChatflow.flowData
+            if (foundIds.includes(id)) {
+                newChatflow.id = undefined
+                newChatflow.name += ' (1)'
+            }
+            newChatflow.flowData = JSON.stringify(JSON.parse(flowData))
+            return newChatflow
+        })
+
+        // step 4 - transactional insert array of entities
+        const insertResponse = await repository.insert(prepChatflows)
+
+        return insertResponse
+    } catch (error) {
+        throw new InternalFlowiseError(
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            `Error: chatflowsService.saveChatflows - ${getErrorMessage(error)}`
         )
     }
 }
@@ -330,12 +405,53 @@ const updateChatflow = async (
         await _checkAndUpdateDocumentStoreUsage(newDbChatflow, chatflow.workspaceId)
         const dbResponse = await appServer.AppDataSource.getRepository(ChatFlow).save(newDbChatflow)
 
+        // Create history snapshot for update
+        const snapshot = await historyService.createSnapshot({
+            entityType: 'CHATFLOW',
+            entityId: dbResponse.id,
+            entityData: dbResponse,
+            changeDescription: 'Updated',
+            workspaceId: dbResponse.workspaceId
+        })
+        if (snapshot) {
+            // Re-fetch the chatflow to get the updated currentHistoryVersion
+            const updatedChatflow = await appServer.AppDataSource.getRepository(ChatFlow).findOne({
+                where: { id: dbResponse.id }
+            })
+            return updatedChatflow || dbResponse
+        }
+
         return dbResponse
     } catch (error) {
         throw new InternalFlowiseError(
             StatusCodes.INTERNAL_SERVER_ERROR,
             `Error: chatflowsService.updateChatflow - ${getErrorMessage(error)}`
         )
+    }
+}
+
+// Get specific chatflow via id (PUBLIC endpoint, used when sharing chatbot link)
+const getSinglePublicChatflow = async (chatflowId: string): Promise<any> => {
+    try {
+        const appServer = getRunningExpressApp()
+        const dbResponse = await appServer.AppDataSource.getRepository(ChatFlow).findOneBy({
+            id: chatflowId
+        })
+        if (dbResponse && dbResponse.isPublic) {
+            return dbResponse
+        } else if (dbResponse && !dbResponse.isPublic) {
+            throw new InternalFlowiseError(StatusCodes.UNAUTHORIZED, `Unauthorized`)
+        }
+        throw new InternalFlowiseError(StatusCodes.NOT_FOUND, `Chatflow ${chatflowId} not found`)
+    } catch (error) {
+        if (error instanceof InternalFlowiseError && error.statusCode === StatusCodes.UNAUTHORIZED) {
+            throw error
+        } else {
+            throw new InternalFlowiseError(
+                StatusCodes.INTERNAL_SERVER_ERROR,
+                `Error: chatflowsService.getSinglePublicChatflow - ${getErrorMessage(error)}`
+            )
+        }
     }
 }
 
@@ -412,7 +528,9 @@ export default {
     getChatflowByApiKey,
     getChatflowById,
     saveChatflow,
+    importChatflows,
     updateChatflow,
+    getSinglePublicChatflow,
     getSinglePublicChatbotConfig,
     checkIfChatflowHasChanged,
     getAllChatflowsCountByOrganization
