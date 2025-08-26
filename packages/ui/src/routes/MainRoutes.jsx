@@ -6,26 +6,14 @@ import Loadable from '@/ui-component/loading/Loadable'
 
 import { RequireAuth } from '@/routes/RequireAuth'
 
-// chatflows routing
-const Chatflows = Loadable(lazy(() => import('@/views/chatflows')))
-
 // agents routing
 const Agentflows = Loadable(lazy(() => import('@/views/agentflows')))
-
-// marketplaces routing
-const Marketplaces = Loadable(lazy(() => import('@/views/marketplaces')))
 
 // apikey routing
 const APIKey = Loadable(lazy(() => import('@/views/apikey')))
 
 // tools routing
 const Tools = Loadable(lazy(() => import('@/views/tools')))
-
-// assistants routing
-const Assistants = Loadable(lazy(() => import('@/views/assistants')))
-const OpenAIAssistantLayout = Loadable(lazy(() => import('@/views/assistants/openai/OpenAIAssistantLayout')))
-const CustomAssistantLayout = Loadable(lazy(() => import('@/views/assistants/custom/CustomAssistantLayout')))
-const CustomAssistantConfigurePreview = Loadable(lazy(() => import('@/views/assistants/custom/CustomAssistantConfigurePreview')))
 
 // credentials routing
 const Credentials = Loadable(lazy(() => import('@/views/credentials')))
@@ -58,9 +46,6 @@ const Files = Loadable(lazy(() => import('@/views/files')))
 // logs routing
 const Logs = Loadable(lazy(() => import('@/views/serverlogs')))
 
-// executions routing
-const Executions = Loadable(lazy(() => import('@/views/agentexecutions')))
-
 // enterprise features
 const UsersPage = Loadable(lazy(() => import('@/views/users')))
 const RolesPage = Loadable(lazy(() => import('@/views/roles')))
@@ -79,16 +64,8 @@ const MainRoutes = {
         {
             path: '/',
             element: (
-                <RequireAuth permission={'chatflows:view'}>
-                    <Chatflows />
-                </RequireAuth>
-            )
-        },
-        {
-            path: '/chatflows',
-            element: (
-                <RequireAuth permission={'chatflows:view'}>
-                    <Chatflows />
+                <RequireAuth permission={'agentflows:view'}>
+                    <Agentflows />
                 </RequireAuth>
             )
         },
@@ -97,22 +74,6 @@ const MainRoutes = {
             element: (
                 <RequireAuth permission={'agentflows:view'}>
                     <Agentflows />
-                </RequireAuth>
-            )
-        },
-        {
-            path: '/executions',
-            element: (
-                <RequireAuth permission={'executions:view'}>
-                    <Executions />
-                </RequireAuth>
-            )
-        },
-        {
-            path: '/marketplaces',
-            element: (
-                <RequireAuth permission={'templates:marketplace,templates:custom'}>
-                    <Marketplaces />
                 </RequireAuth>
             )
         },
@@ -129,38 +90,6 @@ const MainRoutes = {
             element: (
                 <RequireAuth permission={'tools:view'}>
                     <Tools />
-                </RequireAuth>
-            )
-        },
-        {
-            path: '/assistants',
-            element: (
-                <RequireAuth permission={'assistants:view'}>
-                    <Assistants />
-                </RequireAuth>
-            )
-        },
-        {
-            path: '/assistants/custom',
-            element: (
-                <RequireAuth permission={'assistants:view'}>
-                    <CustomAssistantLayout />
-                </RequireAuth>
-            )
-        },
-        {
-            path: '/assistants/custom/:id',
-            element: (
-                <RequireAuth permission={'assistants:view'}>
-                    <CustomAssistantConfigurePreview />
-                </RequireAuth>
-            )
-        },
-        {
-            path: '/assistants/openai',
-            element: (
-                <RequireAuth permission={'assistants:view'}>
-                    <OpenAIAssistantLayout />
                 </RequireAuth>
             )
         },

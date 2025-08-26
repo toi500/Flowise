@@ -67,15 +67,6 @@ const dashboard = {
             type: 'group',
             children: [
                 {
-                    id: 'chatflows',
-                    title: 'Chatflows',
-                    type: 'item',
-                    url: '/chatflows',
-                    icon: icons.IconHierarchy,
-                    breadcrumbs: true,
-                    permission: 'chatflows:view'
-                },
-                {
                     id: 'agentflows',
                     title: 'Agentflows',
                     type: 'item',
@@ -83,33 +74,6 @@ const dashboard = {
                     icon: icons.IconUsersGroup,
                     breadcrumbs: true,
                     permission: 'agentflows:view'
-                },
-                {
-                    id: 'executions',
-                    title: 'Executions',
-                    type: 'item',
-                    url: '/executions',
-                    icon: icons.IconListCheck,
-                    breadcrumbs: true,
-                    permission: 'executions:view'
-                },
-                {
-                    id: 'assistants',
-                    title: 'Assistants',
-                    type: 'item',
-                    url: '/assistants',
-                    icon: icons.IconRobot,
-                    breadcrumbs: true,
-                    permission: 'assistants:view'
-                },
-                {
-                    id: 'marketplaces',
-                    title: 'Marketplaces',
-                    type: 'item',
-                    url: '/marketplaces',
-                    icon: icons.IconBuildingStore,
-                    breadcrumbs: true,
-                    permission: 'templates:marketplace,templates:custom'
                 },
                 {
                     id: 'tools',
